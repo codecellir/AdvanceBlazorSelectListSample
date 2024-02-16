@@ -1,0 +1,163 @@
+﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@inject IJSRuntime JSRuntime
+@typeparam T
+
+<div class="select form-floating" id="Codecell_Select">
+    <input type="text" class="form-control" readonly @bind-value=SelectedText @onclick=Toggle>
+    <label>@Label</label>
+    <i @onclick=Toggle class="@_icon"></i>
+    <i @onclick=ClearAsync class="clear bi bi-x"></i>
+    @if (_open)
+    {
+        <div class="options-wrapper shadow-sm">
+            <input type="text" class="form-control"
+                   placeholder="Search"
+                   @bind-value=_searchValue
+                   @bind-value:event="oninput"
+                   @onkeyup=OnKeyupHandle>
+            <div class="options mt-3">
+                <Virtualize Items="_filterdItems" OverscanCount="8" ItemSize="44">
+                    <div class="item" @onclick="()=>Select(context.Value)">
+                        <a>@context.Text</a>
+                    </div>
+                </Virtualize>
+              @*   @foreach (var item in _filterdItems)
+                {
+                    <div class="item" @onclick="()=>Select(item.Value)">
+                        <a>@item.Text</a>
+                    </div>
+                } *@
+            </div>
+        </div>
+    }
+</div>
+@code {
+
+    [Parameter]
+    public IEnumerable<SelectListItem> Source { get; set; }
+
+    [Parameter]
+    public string Label { get; set; }
+
+    [Parameter]
+    public T Value { get; set; }
+
+    [Parameter]
+    public EventCallback<T> ValueChanged { get; set; }
+
+    HashSet<SelectListItem> _filterdItems = new();
+
+    private Dictionary<T, string> valueTextMap;
+
+    string SelectedText { get; set; }
+
+    bool _open = false;
+
+    string _searchValue;
+
+    string _icon = "bi bi-caret-down-fill";
+
+    DotNetObjectReference<SelectList<T>>? objRef;
+
+    private T ConvertToType(string value)
+    {
+        // Check if T is nullable, if so, handle accordingly
+        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Nullable<>))
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return default(T);
+            }
+            else
+            {
+                var underlyingType = Nullable.GetUnderlyingType(typeof(T));
+                return (T)Convert.ChangeType(value, underlyingType);
+            }
+        }
+        else
+        {
+            return (T)Convert.ChangeType(value, typeof(T));
+        }
+    }
+
+    private string ConvertToString(T value)
+    {
+        if (value is not null && valueTextMap.TryGetValue(value, out var text))
+        {
+            return text;
+        }
+        else
+        {
+            return string.Empty;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        objRef = DotNetObjectReference.Create(this);
+
+        if (Source is not null)
+        {
+            _filterdItems = Source.ToHashSet();
+
+            valueTextMap = Source.ToDictionary(item => ConvertToType(item.Value.ToString()), item => item.Text);
+
+            SelectedText = ConvertToString(Value);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeAsync<object>("outsideClickHandler.addEvent", "Codecell_Select", objRef);
+        }
+    }
+
+    void Toggle(MouseEventArgs arg)
+    {
+        _open = !_open;
+
+        if (_open)
+            _icon = "bi bi-caret-up-fill";
+        else
+            _icon = "bi bi-caret-down-fill";
+    }
+
+    void OnKeyupHandle(KeyboardEventArgs arg)
+    {
+        if (!string.IsNullOrWhiteSpace(_searchValue) && _searchValue.Length > 1)
+        {
+            _filterdItems = Source.Where(_ => _.Text.Contains(_searchValue, StringComparison.OrdinalIgnoreCase)).ToHashSet();
+        }
+        else if (string.IsNullOrWhiteSpace(_searchValue))
+        {
+            _filterdItems = Source.ToHashSet();
+        }
+    }
+
+    async Task Select(string value)
+    {
+        _open = false;
+        _icon = "bi bi-caret-down-fill";
+        SelectedText = Source.FirstOrDefault(_ => _.Value == value)?.Text ?? "";
+        await ValueChanged.InvokeAsync(ConvertToType(value));
+    }
+
+    async Task ClearAsync()
+    {
+        _open = false;
+        _icon = "bi bi-caret-down-fill";
+        Value = default;
+        SelectedText = string.Empty;
+        await ValueChanged.InvokeAsync(Value);
+    }
+
+    [JSInvokable]
+    public void InvokeClickOutside()
+    {
+        _open = false;
+        _icon = "bi bi-caret-down-fill";
+        StateHasChanged();
+    }
+}

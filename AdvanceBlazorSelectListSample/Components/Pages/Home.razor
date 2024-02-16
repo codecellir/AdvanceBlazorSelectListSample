@@ -1,0 +1,35 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Mvc.Rendering
+
+<PageTitle>Home</PageTitle>
+
+<h1>Codecell.ir</h1>
+<div class="row">
+    <div class="col-md-4">
+        <SelectList Label="Select student"
+                    T="long?"
+                    Source="source"
+                    @bind-Value=_itemId />
+    </div>
+</div>
+
+<h2>@_itemId</h2>
+
+@code {
+    List<SelectListItem> source = new();
+
+    long? _itemId;
+
+    protected override void OnInitialized()
+    {
+
+        for (int i = 1; i <= 1_000_000; i++)
+        {
+            source.Add(new()
+                {
+                    Value = i.ToString(),
+                    Text = $"Item-{i}"
+                });
+        }
+    }
+}
